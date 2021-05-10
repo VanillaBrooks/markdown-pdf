@@ -43,6 +43,7 @@ fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{hyperref}
+\usepackage{ulem}
 
 \hypersetup{
 colorlinks=true,
