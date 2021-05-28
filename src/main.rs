@@ -22,6 +22,7 @@ fn main() {
         println!("An Error: {}", e)
     }
 }
+
 fn wrapper() -> Result<(), Error> {
     let mut args: MarkdownPdfArguments = argh::from_env();
 
@@ -45,13 +46,13 @@ fn wrapper() -> Result<(), Error> {
 #[derive(Debug, thiserror::Error)]
 enum Error {
     #[error("IoError occured: `{0}`")]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("Markdown text was not encoded as UTF-8: `{0}`")]
-    EncodingError(#[from] std::string::FromUtf8Error),
+    Encoding(#[from] std::string::FromUtf8Error),
     #[error("The markdown input was not a valid filename")]
     BadFileName,
     #[error("The markdown file name provided was not UTF-8")]
     NonUtf8Filename,
     #[error("Parsing Error")]
-    NomError,
+    Nom,
 }

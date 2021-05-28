@@ -27,21 +27,21 @@ pub(crate) enum Picture {
     Link { link: String, caption: String },
 }
 impl Picture {
-    fn into_latex_picture(self, is_split: bool) -> LatexPicture {
+    fn to_latex_picture(&self, is_split: bool) -> LatexPicture {
         LatexPicture {
-            picture: self,
+            picture: &self,
             is_split,
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct LatexPicture {
-    picture: Picture,
+pub(crate) struct LatexPicture<'a> {
+    picture: &'a Picture,
     is_split: bool,
 }
 
-impl LatexPicture {
+impl<'a> LatexPicture<'a> {
     fn get_path(&self) -> String {
         match &self.picture {
             Picture::Path { path, .. } => path.clone(),
@@ -72,17 +72,17 @@ impl From<Vec<Span>> for Title {
 }
 
 pub(crate) trait Latex {
-    fn to_latex(self, buffer: &mut String);
+    fn to_latex(&self, buffer: &mut String);
 }
 
 impl Latex for Title {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         self.title.to_latex(buffer);
     }
 }
 
-impl Latex for LatexPicture {
-    fn to_latex(self, buffer: &mut String) {
+impl<'a> Latex for LatexPicture<'a> {
+    fn to_latex(&self, buffer: &mut String) {
         let path = self.get_path();
         buffer.push_str(
             r#"
@@ -116,7 +116,7 @@ impl Latex for LatexPicture {
 }
 
 impl Latex for ContentOptions {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         match self {
             ContentOptions::OnlyText(content_list) => {
                 for c in content_list {
@@ -125,7 +125,7 @@ impl Latex for ContentOptions {
                 }
             }
             ContentOptions::OnlyPicture(picture) => {
-                picture.into_latex_picture(false).to_latex(buffer);
+                picture.to_latex_picture(false).to_latex(buffer);
             }
             ContentOptions::TextAndPicture(content, picture) => {
                 buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
@@ -138,7 +138,7 @@ impl Latex for ContentOptions {
                 buffer.push_str("\t\\hfill\n");
                 buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
 
-                picture.into_latex_picture(true).to_latex(buffer);
+                picture.to_latex_picture(true).to_latex(buffer);
 
                 buffer.push_str("\t\\end{minipage}\n");
             }
@@ -147,7 +147,7 @@ impl Latex for ContentOptions {
 }
 
 impl Latex for Block {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         match self {
             Block::Paragraph(spans) => spans.to_latex(buffer),
             Block::BulletedList(span_spans) => span_spans.to_latex(buffer),
@@ -159,10 +159,10 @@ impl Latex for Block {
 }
 
 impl Latex for Vec<BulletItem> {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         buffer.push_str("\n\\begin{itemize}\n");
 
-        for item in self.into_iter() {
+        for item in self.iter() {
             item.to_latex(buffer)
         }
 
@@ -171,7 +171,7 @@ impl Latex for Vec<BulletItem> {
 }
 
 impl Latex for BulletItem {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         match self {
             BulletItem::Single(spans) => {
                 buffer.push_str("\\item ");
@@ -184,15 +184,15 @@ impl Latex for BulletItem {
 }
 
 impl Latex for Vec<Span> {
-    fn to_latex(self, buffer: &mut String) {
-        for span in self.into_iter() {
+    fn to_latex(&self, buffer: &mut String) {
+        for span in self.iter() {
             span.to_latex(buffer);
         }
     }
 }
 
 impl Latex for Span {
-    fn to_latex(self, buffer: &mut String) {
+    fn to_latex(&self, buffer: &mut String) {
         match self {
             Span::Bold(s) => wrap_text(buffer, "\\textbf{", &s, "}"),
             Span::Strikethrough(s) => wrap_text(buffer, "\\sout{", &s, "}"),

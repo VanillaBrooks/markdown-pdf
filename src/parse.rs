@@ -1,5 +1,6 @@
 use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
 use super::Error;
+use std::cmp::Ordering;
 use std::io::Read;
 
 use nom::branch::alt;
@@ -15,11 +16,11 @@ pub(crate) fn parse_markdown<R: Read>(mut reader: R) -> Result<Presentation, Err
     reader.read_to_end(&mut buffer)?;
     let text = String::from_utf8(buffer)?;
 
-    let (_, presentation) = inner_parse(&text).map_err(|_| Error::NomError)?;
+    let (_, presentation) = inner_parse(&text).map_err(|_| Error::Nom)?;
     Ok(presentation)
 }
 
-fn inner_parse<'a>(i: &'a str) -> IResult<&'a str, Presentation> {
+fn inner_parse(i: &'_ str) -> IResult<&'_ str, Presentation> {
     let (rest, (title, author)) = parse_start_header(i)?;
 
     let (rest, slides) = many0(parse_slide)(rest)?;
@@ -34,7 +35,7 @@ fn inner_parse<'a>(i: &'a str) -> IResult<&'a str, Presentation> {
     ))
 }
 
-fn parse_start_header<'a>(i: &'a str) -> IResult<&'a str, (Title, String)> {
+fn parse_start_header(i: &'_ str) -> IResult<&'_ str, (Title, String)> {
     let (rest, _) = take_till(|c| c == '#')(i)?;
     let (rest, _) = tag("# ")(rest)?;
     let (rest, title_name) = take_till(|c| c == '\n')(rest)?;
@@ -49,7 +50,7 @@ fn parse_start_header<'a>(i: &'a str) -> IResult<&'a str, (Title, String)> {
     ))
 }
 
-fn parse_slide<'a>(i: &'a str) -> IResult<&'a str, Slide> {
+fn parse_slide(i: &'_ str) -> IResult<&'_ str, Slide> {
     let (title_start, _) = tuple((take_until("##"), tag("## ")))(i)?;
 
     let (rest, slide_title) = take_till(|c| c == '\n')(title_start)?;
@@ -188,22 +189,26 @@ fn collect_bullet_items(
     current_indentation: usize,
 ) {
     loop {
-        if flat.len() > 0 {
+        if flat.is_empty() {
             let (indentation, _bullet_data) = &flat[0];
             // copy the data for borrowing rules
             let indentation = *indentation;
 
-            if indentation > current_indentation {
-                let mut new_buffer = Vec::new();
-                collect_bullet_items(flat, &mut new_buffer, indentation);
-                nested.push(BulletItem::Nested(new_buffer));
-            } else if indentation < current_indentation {
-                // return back to the previous level of indentation
-                return;
-            } else {
-                // we have the same level of indentation
-                let item = flat.remove(0);
-                nested.push(item.1)
+            match indentation.cmp(&current_indentation) {
+                Ordering::Greater => {
+                    let mut new_buffer = Vec::new();
+                    collect_bullet_items(flat, &mut new_buffer, indentation);
+                    nested.push(BulletItem::Nested(new_buffer));
+                }
+                Ordering::Less => {
+                    // return back to the previous level of indentation
+                    return;
+                }
+                Ordering::Equal => {
+                    // we have the same level of indentation
+                    let item = flat.remove(0);
+                    nested.push(item.1)
+                }
             }
         } else {
             break;
@@ -213,14 +218,13 @@ fn collect_bullet_items(
 
 fn parse_string<'a>(i: &'a str) -> Result<Vec<Span>, NomErr> {
     let span_options = |x: &'a str| {
-        let alts = alt((
+        alt((
             parse_strikethrough,
             parse_bold,
             parse_italics,
             parse_equation,
             parse_regular_text,
-        ))(x);
-        alts
+        ))(x)
     };
 
     let out = nom::multi::many1(span_options)(i)?;
@@ -229,7 +233,7 @@ fn parse_string<'a>(i: &'a str) -> Result<Vec<Span>, NomErr> {
 }
 
 // TODO: does not handle escaped sequences
-fn parse_bold<'a>(i: &'a str) -> IResult<&'a str, Span> {
+fn parse_bold(i: &str) -> IResult<&str, Span> {
     let (rest, (_, bolded_text, _)) = tuple((
         //
         tag("**"),
@@ -241,7 +245,7 @@ fn parse_bold<'a>(i: &'a str) -> IResult<&'a str, Span> {
 }
 
 // TODO: does not handle escaped sequences
-fn parse_strikethrough<'a>(i: &'a str) -> IResult<&'a str, Span> {
+fn parse_strikethrough(i: &str) -> IResult<&str, Span> {
     let (rest, (_, strikethrough, _)) = tuple((
         //
         tag("~~"),
@@ -253,7 +257,7 @@ fn parse_strikethrough<'a>(i: &'a str) -> IResult<&'a str, Span> {
 }
 
 // TODO: does not handle escaped sequences
-fn parse_italics<'a>(i: &'a str) -> IResult<&'a str, Span> {
+fn parse_italics(i: &str) -> IResult<&str, Span> {
     let (rest, (_, italics, _)) = tuple((
         //
         tag("*"),
@@ -265,7 +269,7 @@ fn parse_italics<'a>(i: &'a str) -> IResult<&'a str, Span> {
 }
 
 // TODO: does not handle escaped sequences
-fn parse_equation<'a>(i: &'a str) -> IResult<&'a str, Span> {
+fn parse_equation(i: &'_ str) -> IResult<&'_ str, Span> {
     let (rest, (_, italics, _)) = tuple((
         //
         tag("$$"),
@@ -276,8 +280,8 @@ fn parse_equation<'a>(i: &'a str) -> IResult<&'a str, Span> {
     Ok((rest, Span::Equation(italics.to_string())))
 }
 
-fn parse_regular_text<'a>(i: &'a str) -> IResult<&'a str, Span> {
-    if i.len() == 0 {
+fn parse_regular_text(i: &'_ str) -> IResult<&'_ str, Span> {
+    if i.is_empty() {
         return Err(nom::Err::Error(nom::error::Error::new(
             "",
             nom::error::ErrorKind::Eof,
@@ -302,7 +306,7 @@ where
     let mut idx = 0;
 
     loop {
-        if let Ok(_) = parser(current_slice) {
+        if parser(current_slice).is_ok() {
             break;
         }
 
@@ -327,11 +331,7 @@ pub(crate) enum Block {
 }
 impl Block {
     fn is_picture(&self) -> bool {
-        if let Block::Picture(_) = &self {
-            true
-        } else {
-            false
-        }
+        matches!(&self, Block::Picture(_))
     }
     fn unwrap_picture(self) -> Picture {
         if let Block::Picture(picture) = self {

@@ -1,14 +1,12 @@
 [package]
 name = "markdown-pdf"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["VanillaBrooks <brooks@karlik.org>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-markdown = "0.3.0"
 thiserror = "1.0.24"
-derive_more = "0.99.13"
 argh = "0.1.4"
 nom = "6.1.2"
