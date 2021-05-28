@@ -24,12 +24,17 @@ fn write_slide<W: Write>(mut writer: W, slide: Slide) -> Result<(), Error> {
             .as_bytes(),
     )?;
 
-    writer.write_all(slide.title.to_latex().as_bytes())?;
+    let mut buffer = String::with_capacity(200);
+    slide.title.to_latex(&mut buffer);
+    writer.write_all(buffer.as_bytes())?;
     writer.write_all("}\n\n".as_bytes())?;
-    // Now finished writing the frame title
-    //
 
-    writer.write_all(slide.contents.to_latex().as_bytes())?;
+    // Now finished writing the frame title
+
+    let mut buffer = String::with_capacity(200);
+    slide.contents.to_latex(&mut buffer);
+
+    writer.write_all(buffer.as_bytes())?;
 
     writer.write_all("\n\\end{frame}\n\n\n".as_bytes())?;
 
@@ -58,7 +63,9 @@ urlcolor=cyan,
             .as_bytes(),
     )?;
 
-    writer.write_all(title.to_latex().as_bytes())?;
+    let mut buffer = String::with_capacity(200);
+    title.to_latex(&mut buffer);
+    writer.write_all(buffer.as_bytes())?;
 
     writer.write_all(
         r#"}

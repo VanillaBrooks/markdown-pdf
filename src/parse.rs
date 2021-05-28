@@ -1,12 +1,10 @@
-use super::data::{Content, ContentOptions, Picture, Presentation, Slide, Title};
+use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
 use super::Error;
 use std::io::Read;
-use std::iter::Peekable;
-use std::path::PathBuf;
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till, take_until};
-use nom::multi::many1;
+use nom::multi::{many0, many1};
 use nom::sequence::tuple;
 use nom::IResult;
 
@@ -16,44 +14,71 @@ pub(crate) fn parse_markdown<R: Read>(mut reader: R) -> Result<Presentation, Err
     let mut buffer = Vec::new();
     reader.read_to_end(&mut buffer)?;
     let text = String::from_utf8(buffer)?;
-    let tokens = markdown::tokenize(&text).into_iter();
-    dbg!(&tokens);
 
-    //let (title, author, tokens) = read_title(tokens)?;
-
-    //let mut tokens = tokens.peekable();
-
-    //let mut slides = vec![];
-
-    //while tokens.len() != 0 {
-    //    let (slide, tmp) = read_slide(tokens)?;
-    //    tokens = tmp;
-    //    slides.push(slide);
-    //}
-
-    //Ok(Presentation {
-    //    title,
-    //    author,
-    //    slides,
-    //})
-    todo!();
+    let (_, presentation) = inner_parse(&text).map_err(|_| Error::NomError)?;
+    Ok(presentation)
 }
 
 fn inner_parse<'a>(i: &'a str) -> IResult<&'a str, Presentation> {
-    let (rest, (title, author)) = parse_header(i)?;
-    todo!()
+    let (rest, (title, author)) = parse_start_header(i)?;
+
+    let (rest, slides) = many0(parse_slide)(rest)?;
+
+    Ok((
+        rest,
+        Presentation {
+            title,
+            author,
+            slides,
+        },
+    ))
 }
 
-fn parse_header<'a>(i: &'a str) -> IResult<&'a str, (Title, String)> {
+fn parse_start_header<'a>(i: &'a str) -> IResult<&'a str, (Title, String)> {
     let (rest, _) = take_till(|c| c == '#')(i)?;
-    tag("# ")(rest)?;
-    let (rest, title_name) = take_till(|c| c == '\n')(i)?;
-    todo!()
+    let (rest, _) = tag("# ")(rest)?;
+    let (rest, title_name) = take_till(|c| c == '\n')(rest)?;
+    let (author_start, _whitespace) = tag("\nAUTHOR=")(rest)?;
+    let (rest, author_name) = take_till(|c| c == '\n')(author_start)?;
+
+    let title_spans = parse_string(title_name)?;
+
+    Ok((
+        rest,
+        (Title { title: title_spans }, author_name.to_string()),
+    ))
 }
 
+fn parse_slide<'a>(i: &'a str) -> IResult<&'a str, Slide> {
+    let (title_start, _) = tuple((take_until("##"), tag("## ")))(i)?;
+
+    let (rest, slide_title) = take_till(|c| c == '\n')(title_start)?;
+    let (rest, blocks) = parse_block(rest)?;
+
+    let (pictures, non_pictures): (Vec<_>, Vec<_>) =
+        blocks.into_iter().partition(|b| b.is_picture());
+
+    let contents = match (pictures.into_iter().next(), non_pictures.len()) {
+        (Some(picture), 0) => ContentOptions::OnlyPicture(picture.unwrap_picture()),
+        (Some(picture), _) => {
+            ContentOptions::TextAndPicture(non_pictures, picture.unwrap_picture())
+        }
+        (None, _) => ContentOptions::OnlyText(non_pictures),
+    };
+
+    let slide = Slide {
+        title: Title {
+            title: parse_string(slide_title)?,
+        },
+        contents,
+    };
+
+    Ok((rest, slide))
+}
+
+// TODO: stop conditions for pictures
 fn parse_block<'a>(i: &'a str) -> IResult<&'a str, Vec<Block>> {
     let alt_parser = |x: &'a str| -> IResult<&'a str, &'a str> {
-        println!("``{}``", x);
         alt((take_until("\n\n"), take_until("\n")))(x)
     };
     let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
@@ -62,17 +87,22 @@ fn parse_block<'a>(i: &'a str) -> IResult<&'a str, Vec<Block>> {
 
     let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
 
-    let (rest, (block_whitespace_iter, _)) =
-        nom::multi::many_till(block_stop, tuple((whitespace, is_start_header)))(i)?;
+    let end_of_slide = tuple((whitespace, alt((nom::combinator::eof, is_start_header))));
+
+    let (rest, (block_whitespace_iter, _)) = nom::multi::many_till(block_stop, end_of_slide)(i)?;
 
     let blocks: Vec<Block> = block_whitespace_iter
         .into_iter()
         .map(|x| x.1)
-        .map(|block_text| alt((parse_block_as_bullets, parse_block_as_paragraph))(block_text))
+        .map(|block_text| {
+            alt((
+                parse_block_as_picture,
+                parse_block_as_bullets,
+                parse_block_as_paragraph,
+            ))(block_text)
+        })
         .map(|x| x.unwrap().1)
         .collect();
-
-    dbg!(&blocks);
 
     Ok((rest, blocks))
 }
@@ -87,6 +117,30 @@ fn is_start_header(i: &str) -> IResult<&str, &str> {
 fn parse_block_as_paragraph(i: &str) -> IResult<&str, Block> {
     let spans = parse_string(i)?;
     Ok(("", Block::Paragraph(spans)))
+}
+
+fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
+    let (caption_start, _) = tag("![")(i)?;
+    let (location_paren_start, caption) = take_till(|c| c == ']')(caption_start)?;
+    let (location_start, _) = tag("](")(location_paren_start)?;
+    let (rest, location) = take_till(|c| c == ')')(location_start)?;
+
+    let caption = caption.to_string();
+    let location = location.to_string();
+
+    let picture = if location.starts_with("http") {
+        Picture::Link {
+            caption,
+            link: location,
+        }
+    } else {
+        Picture::Path {
+            caption,
+            path: location,
+        }
+    };
+
+    Ok((rest, Block::Picture(picture)))
 }
 
 fn parse_block_as_bullets(i: &str) -> IResult<&str, Block> {
@@ -135,12 +189,15 @@ fn collect_bullet_items(
 ) {
     loop {
         if flat.len() > 0 {
-            let (indentation, bullet_data) = &flat[0];
-            if *indentation > current_indentation {
+            let (indentation, _bullet_data) = &flat[0];
+            // copy the data for borrowing rules
+            let indentation = *indentation;
+
+            if indentation > current_indentation {
                 let mut new_buffer = Vec::new();
-                collect_bullet_items(flat, &mut new_buffer, *indentation);
+                collect_bullet_items(flat, &mut new_buffer, indentation);
                 nested.push(BulletItem::Nested(new_buffer));
-            } else if *indentation < current_indentation {
+            } else if indentation < current_indentation {
                 // return back to the previous level of indentation
                 return;
             } else {
@@ -160,6 +217,7 @@ fn parse_string<'a>(i: &'a str) -> Result<Vec<Span>, NomErr> {
             parse_strikethrough,
             parse_bold,
             parse_italics,
+            parse_equation,
             parse_regular_text,
         ))(x);
         alts
@@ -206,6 +264,18 @@ fn parse_italics<'a>(i: &'a str) -> IResult<&'a str, Span> {
     Ok((rest, Span::Italics(italics.to_string())))
 }
 
+// TODO: does not handle escaped sequences
+fn parse_equation<'a>(i: &'a str) -> IResult<&'a str, Span> {
+    let (rest, (_, italics, _)) = tuple((
+        //
+        tag("$$"),
+        take_until("$$"),
+        tag("$$"),
+    ))(i)?;
+
+    Ok((rest, Span::Equation(italics.to_string())))
+}
+
 fn parse_regular_text<'a>(i: &'a str) -> IResult<&'a str, Span> {
     if i.len() == 0 {
         return Err(nom::Err::Error(nom::error::Error::new(
@@ -250,13 +320,30 @@ where
 }
 
 #[derive(Debug, PartialEq)]
-enum Block {
+pub(crate) enum Block {
     Paragraph(Vec<Span>),
     BulletedList(Vec<BulletItem>),
+    Picture(Picture),
+}
+impl Block {
+    fn is_picture(&self) -> bool {
+        if let Block::Picture(_) = &self {
+            true
+        } else {
+            false
+        }
+    }
+    fn unwrap_picture(self) -> Picture {
+        if let Block::Picture(picture) = self {
+            picture
+        } else {
+            panic!("tried to unwrap a paragraph / bullet list block into a picture ")
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
-enum BulletItem {
+pub(crate) enum BulletItem {
     // a single bullet point that is at the same indentation level
     Single(Vec<Span>),
     // a set of bullet points at one more indentation level than the current level
@@ -264,19 +351,12 @@ enum BulletItem {
 }
 
 #[derive(Debug, PartialEq)]
-enum Span {
+pub(crate) enum Span {
     Bold(String),          //
     Strikethrough(String), //
     Italics(String),       //
     Text(String),          //
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum MarkdownError {
-    #[error("There was no `# title` or `## title` defined for the markdown document")]
-    MissingTitle,
-    #[error("There was no author specified on the document")]
-    MissingAuthor,
+    Equation(String),
 }
 
 #[cfg(test)]
@@ -424,5 +504,59 @@ mod tests {
         ]);
 
         assert_eq!(out.1, expected)
+    }
+
+    #[test]
+    fn get_header() {
+        let text = r#"
+# Presentation Title
+AUTHOR=Author Name
+
+        "#;
+
+        let out = parse_start_header(text);
+        dbg!(&out);
+        let (_, (title, author)) = out.unwrap();
+        let expected_title = Title {
+            title: vec![Span::Text("Presentation Title".to_string())],
+        };
+        assert_eq!(title, expected_title);
+        assert_eq!(author, "Author Name");
+    }
+
+    #[test]
+    fn parse_slide_1() {
+        let text = r#"
+## Slide Title
+
+some inner text
+
+some more text
+
+"#;
+
+        let out = parse_slide(text);
+        dbg!(&out);
+        let out = out.unwrap();
+
+        let expected = ContentOptions::OnlyText(vec![
+            Block::Paragraph(vec![Span::Text("some inner text".to_string())]),
+            Block::Paragraph(vec![Span::Text("some more text".to_string())]),
+        ]);
+
+        assert_eq!(out.1.contents, expected);
+    }
+
+    #[test]
+    fn parse_picture_1() {
+        let text = "![caption](path)";
+        let out = parse_block_as_picture(text);
+        dbg!(&out);
+        let out = out.unwrap().1;
+        let expected = Picture::Path {
+            path: "path".to_string(),
+            caption: "caption".to_string(),
+        };
+        assert_eq!(out.unwrap_picture(), expected);
     }
 }

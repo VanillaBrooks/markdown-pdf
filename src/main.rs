@@ -48,10 +48,10 @@ enum Error {
     IoError(#[from] std::io::Error),
     #[error("Markdown text was not encoded as UTF-8: `{0}`")]
     EncodingError(#[from] std::string::FromUtf8Error),
-    #[error("The markdown provided was malformed: `{0}`")]
-    MarkdownFormatting(#[from] parse::MarkdownError),
     #[error("The markdown input was not a valid filename")]
     BadFileName,
     #[error("The markdown file name provided was not UTF-8")]
     NonUtf8Filename,
+    #[error("Parsing Error")]
+    NomError,
 }

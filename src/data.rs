@@ -1,18 +1,4 @@
-use markdown::Span;
-use std::path::PathBuf;
-
-macro_rules! filter_span {
-    ($var:ident, $($ext:ident),*) => {
-        match $var {
-            $( Span::$ext(..) => true,)*
-            _ => false
-        }
-
-    };
-    (@create_match $ext:ident) => {
-        Span::$ext => true,
-    };
-}
+use super::parse::{Block, BulletItem, Span};
 
 #[derive(Debug)]
 pub(crate) struct Presentation {
@@ -28,27 +14,36 @@ pub(crate) struct Slide {
     pub(crate) contents: ContentOptions,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ContentOptions {
-    OnlyText(Vec<Content>),
+    OnlyText(Vec<Block>),
     OnlyPicture(Picture),
-    TextAndPicture(Vec<Content>, Picture),
+    TextAndPicture(Vec<Block>, Picture),
 }
 
-#[derive(Debug)]
-pub(crate) enum Content {
-    Text(Vec<Span>),
-    BulletList(Vec<markdown::ListItem>),
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Picture {
-    Path { path: PathBuf, caption: String },
+    Path { path: String, caption: String },
     Link { link: String, caption: String },
 }
 impl Picture {
-    fn get_path(&self) -> PathBuf {
-        match &self {
+    fn into_latex_picture(self, is_split: bool) -> LatexPicture {
+        LatexPicture {
+            picture: self,
+            is_split,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct LatexPicture {
+    picture: Picture,
+    is_split: bool,
+}
+
+impl LatexPicture {
+    fn get_path(&self) -> String {
+        match &self.picture {
             Picture::Path { path, .. } => path.clone(),
             Picture::Link { .. } => {
                 // TODO: download the picture
@@ -58,16 +53,16 @@ impl Picture {
     }
 
     fn caption(&self) -> &str {
-        match &self {
+        match &self.picture {
             Picture::Path { caption, .. } => caption,
             Picture::Link { caption, .. } => &caption,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Title {
-    title: Vec<Span>,
+    pub(crate) title: Vec<Span>,
 }
 
 impl From<Vec<Span>> for Title {
@@ -77,153 +72,139 @@ impl From<Vec<Span>> for Title {
 }
 
 pub(crate) trait Latex {
-    fn to_latex(self) -> String;
+    fn to_latex(self, buffer: &mut String);
 }
 
 impl Latex for Title {
-    fn to_latex(self) -> String {
-        let mut buffer = String::new();
-        text_latex(&mut buffer, self.title);
-        buffer
+    fn to_latex(self, buffer: &mut String) {
+        self.title.to_latex(buffer);
+    }
+}
+
+impl Latex for LatexPicture {
+    fn to_latex(self, buffer: &mut String) {
+        let path = self.get_path();
+        buffer.push_str(
+            r#"
+    \begin{figure}
+        \centering"#,
+        );
+
+        if self.is_split {
+            buffer.push_str(
+                r#"
+        \includegraphics[width=\textwidth]{"#,
+            );
+        } else {
+            buffer.push_str(
+                r#"
+        \includegraphics[width=0.9\paperwidth,height=0.7\paperheight,keepaspectratio]{"#,
+            );
+        }
+
+        buffer.push_str(&path);
+        buffer.push_str(
+            r#"}
+        \caption{"#,
+        );
+        buffer.push_str(self.caption());
+        buffer.push_str(
+            r#"}
+    \end{figure}"#,
+        );
     }
 }
 
 impl Latex for ContentOptions {
-    fn to_latex(self) -> String {
-        let mut buffer = String::new();
-
+    fn to_latex(self, buffer: &mut String) {
         match self {
             ContentOptions::OnlyText(content_list) => {
                 for c in content_list {
-                    buffer.push_str(&c.to_latex())
+                    c.to_latex(buffer);
+                    buffer.push_str("\n\n")
                 }
             }
             ContentOptions::OnlyPicture(picture) => {
-                picture_latex(&mut buffer, picture, false);
+                picture.into_latex_picture(false).to_latex(buffer);
             }
             ContentOptions::TextAndPicture(content, picture) => {
                 buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
 
                 for c in content {
-                    buffer.push_str(&c.to_latex());
+                    c.to_latex(buffer)
                 }
 
                 buffer.push_str("\n\t\\end{minipage}%\n");
                 buffer.push_str("\t\\hfill\n");
                 buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
 
-                picture_latex(&mut buffer, picture, true);
+                picture.into_latex_picture(true).to_latex(buffer);
 
                 buffer.push_str("\t\\end{minipage}\n");
             }
         }
-
-        buffer
     }
 }
 
-impl Latex for Content {
-    fn to_latex(self) -> String {
-        let mut buffer = String::new();
+impl Latex for Block {
+    fn to_latex(self, buffer: &mut String) {
         match self {
-            Content::Text(spans) => text_latex(&mut buffer, spans),
-            Content::BulletList(span_spans) => bulletpoints_latex(&mut buffer, span_spans),
-        }
-        buffer
-    }
-}
-
-fn picture_latex(buffer: &mut String, picture: Picture, is_split: bool) {
-    let path = picture.get_path();
-
-    buffer.push_str(
-        r#"
-    \begin{figure}
-        \centering"#,
-    );
-
-    if is_split {
-        buffer.push_str(
-            r#"
-        \includegraphics[width=\textwidth]{"#,
-        );
-    } else {
-        buffer.push_str(
-            r#"
-        \includegraphics[width=0.9\paperwidth,height=0.7\paperheight,keepaspectratio]{"#,
-        );
-    }
-
-    buffer.push_str(
-        &path
-            .into_os_string()
-            .into_string()
-            .expect("path provided was not utf8"),
-    );
-    buffer.push_str(
-        r#"}
-        \caption{"#,
-    );
-    buffer.push_str(picture.caption());
-    buffer.push_str(
-        r#"}
-    \end{figure}"#,
-    );
-}
-
-fn bulletpoints_latex(buffer: &mut String, spans: Vec<markdown::ListItem>) {
-    buffer.push_str("\t\\begin{itemize}\n");
-
-    for item in spans {
-        match item {
-            markdown::ListItem::Simple(span) => {
-                //
-                buffer.push_str("\t\t\\item ");
-                text_latex(buffer, span);
-                buffer.push_str("\n");
-            }
-            markdown::ListItem::Paragraph(paragraph) => {
-                for block in paragraph {
-                    match block {
-                        markdown::Block::Paragraph(new_list) => {
-                            buffer.push_str("\t\t\\item ");
-                            text_latex(buffer, new_list);
-                            buffer.push_str("\n");
-                        }
-                        markdown::Block::UnorderedList(new_list) => {
-                            bulletpoints_latex(buffer, new_list)
-                        }
-                        _ => (),
-                    }
-                }
-
-                //
+            Block::Paragraph(spans) => spans.to_latex(buffer),
+            Block::BulletedList(span_spans) => span_spans.to_latex(buffer),
+            Block::Picture(_) => {
+                panic!("pictures should be removed from blocks prior to processing")
             }
         }
     }
-
-    buffer.push_str("\t\\end{itemize}\n");
 }
-fn text_latex(buffer: &mut String, spans: Vec<Span>) {
-    for i in spans
-        .into_iter()
-        .filter(|x| filter_span!(x, Text, Emphasis, Strong))
-    {
-        match i {
-            Span::Text(text) => buffer.push_str(&text),
-            Span::Emphasis(new_spans) => {
-                buffer.push_str("\\emph{");
-                text_latex(buffer, new_spans);
-                buffer.push('}');
-            }
-            Span::Strong(new_spans) => {
-                buffer.push_str("\\textbf{");
-                text_latex(buffer, new_spans);
-                buffer.push('}');
-            }
-            _ => unreachable!(),
+
+impl Latex for Vec<BulletItem> {
+    fn to_latex(self, buffer: &mut String) {
+        buffer.push_str("\n\\begin{itemize}\n");
+
+        for item in self.into_iter() {
+            item.to_latex(buffer)
         }
 
-        //
+        buffer.push_str("\n\\end{itemize}\n");
     }
+}
+
+impl Latex for BulletItem {
+    fn to_latex(self, buffer: &mut String) {
+        match self {
+            BulletItem::Single(spans) => {
+                buffer.push_str("\\item ");
+                spans.to_latex(buffer);
+                buffer.push('\n');
+            }
+            BulletItem::Nested(item_list) => item_list.to_latex(buffer),
+        }
+    }
+}
+
+impl Latex for Vec<Span> {
+    fn to_latex(self, buffer: &mut String) {
+        for span in self.into_iter() {
+            span.to_latex(buffer);
+        }
+    }
+}
+
+impl Latex for Span {
+    fn to_latex(self, buffer: &mut String) {
+        match self {
+            Span::Bold(s) => wrap_text(buffer, "\\textbf{", &s, "}"),
+            Span::Strikethrough(s) => wrap_text(buffer, "\\sout{", &s, "}"),
+            Span::Italics(s) => wrap_text(buffer, "\\emph{", &s, "}"),
+            Span::Text(s) => wrap_text(buffer, "", &s, ""),
+            Span::Equation(s) => wrap_text(buffer, "$$", &s, "$$"),
+        }
+    }
+}
+
+fn wrap_text(buffer: &mut String, start: &'static str, inner: &str, end: &'static str) {
+    buffer.push_str(start);
+    buffer.push_str(inner);
+    buffer.push_str(end);
 }
