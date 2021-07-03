@@ -19,7 +19,7 @@ pub(crate) fn write_latex<W: Write>(
 
 fn write_slide<W: Write>(mut writer: W, slide: Slide) -> Result<(), Error> {
     writer.write_all(
-        r#"\begin{frame}
+        r#"\begin{frame}[fragile]
     \frametitle{"#
             .as_bytes(),
     )?;
@@ -49,6 +49,34 @@ fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result
 \usepackage{float}
 \usepackage{hyperref}
 \usepackage{ulem}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\tiny,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\lstset{style=mystyle}
 
 \hypersetup{
 colorlinks=true,

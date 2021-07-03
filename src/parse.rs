@@ -1,4 +1,4 @@
-use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
+use super::data::{Code, ContentOptions, Picture, Presentation, Slide, Title};
 use super::Error;
 use std::cmp::Ordering;
 use std::io::Read;
@@ -17,6 +17,7 @@ pub(crate) fn parse_markdown<R: Read>(mut reader: R) -> Result<Presentation, Err
     let text = String::from_utf8(buffer)?;
 
     let (_, presentation) = inner_parse(&text).map_err(|_| Error::Nom)?;
+    dbg!(&presentation);
     Ok(presentation)
 }
 
@@ -60,6 +61,7 @@ fn parse_slide(i: &'_ str) -> IResult<&'_ str, Slide> {
         blocks.into_iter().partition(|b| b.is_picture());
 
     let contents = match (pictures.into_iter().next(), non_pictures.len()) {
+        // other cases without code included
         (Some(picture), 0) => ContentOptions::OnlyPicture(picture.unwrap_picture()),
         (Some(picture), _) => {
             ContentOptions::TextAndPicture(non_pictures, picture.unwrap_picture())
@@ -79,31 +81,26 @@ fn parse_slide(i: &'_ str) -> IResult<&'_ str, Slide> {
 
 // TODO: stop conditions for pictures
 fn parse_block<'a>(i: &'a str) -> IResult<&'a str, Vec<Block>> {
-    let alt_parser = |x: &'a str| -> IResult<&'a str, &'a str> {
-        alt((take_until("\n\n"), take_until("\n")))(x)
-    };
-    let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
-
-    let block_stop = tuple((whitespace, alt_parser));
-
     let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
 
     let end_of_slide = tuple((whitespace, alt((nom::combinator::eof, is_start_header))));
 
-    let (rest, (block_whitespace_iter, _)) = nom::multi::many_till(block_stop, end_of_slide)(i)?;
+    let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
 
-    let blocks: Vec<Block> = block_whitespace_iter
-        .into_iter()
-        .map(|x| x.1)
-        .map(|block_text| {
+    let (rest, (blocks, _)): (_, (Vec<(&str, Block)>, _)) = nom::multi::many_till(
+        tuple((
+            whitespace,
             alt((
                 parse_block_as_picture,
                 parse_block_as_bullets,
+                parse_as_code,
                 parse_block_as_paragraph,
-            ))(block_text)
-        })
-        .map(|x| x.unwrap().1)
-        .collect();
+            )),
+        )),
+        end_of_slide,
+    )(i)?;
+
+    let blocks = blocks.into_iter().map(|x| x.1).collect();
 
     Ok((rest, blocks))
 }
@@ -116,8 +113,9 @@ fn is_start_header(i: &str) -> IResult<&str, &str> {
 }
 
 fn parse_block_as_paragraph(i: &str) -> IResult<&str, Block> {
-    let spans = parse_string(i)?;
-    Ok(("", Block::Paragraph(spans)))
+    let (rest, before_block_end) = take_until_parser_success(i, tag("\n\n"))?;
+    let spans = parse_string(before_block_end)?;
+    Ok((rest, Block::Paragraph(spans)))
 }
 
 fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
@@ -125,6 +123,7 @@ fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
     let (location_paren_start, caption) = take_till(|c| c == ']')(caption_start)?;
     let (location_start, _) = tag("](")(location_paren_start)?;
     let (rest, location) = take_till(|c| c == ')')(location_start)?;
+    let (rest, _) = tag(")")(rest)?;
 
     let caption = caption.to_string();
     let location = location.to_string();
@@ -147,7 +146,7 @@ fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
 fn parse_block_as_bullets(i: &str) -> IResult<&str, Block> {
     let take_whitespace = take_till(|c| c != '\n');
 
-    let (_, bullets) = many1(tuple((take_whitespace, parse_bullet_item)))(i)?;
+    let (rest, bullets) = many1(tuple((take_whitespace, parse_bullet_item)))(i)?;
 
     let mut bullets: Vec<(usize, BulletItem)> = bullets.into_iter().map(|x| x.1).collect();
 
@@ -155,7 +154,7 @@ fn parse_block_as_bullets(i: &str) -> IResult<&str, Block> {
 
     collect_bullet_items(&mut bullets, &mut organized, 0);
 
-    Ok(("", Block::BulletedList(organized)))
+    Ok((rest, Block::BulletedList(organized)))
 }
 
 fn parse_bullet_item(i: &str) -> IResult<&str, (usize, BulletItem)> {
@@ -183,13 +182,26 @@ fn parse_bullet_item(i: &str) -> IResult<&str, (usize, BulletItem)> {
     ))
 }
 
+fn parse_as_code(i: &str) -> IResult<&str, Block> {
+    let (rest, _whitespace) = take_till(|c| c != '\n')(i)?;
+
+    // TODO: parse the language used here
+    let (code_internal, _block_start) =
+        tuple((tag("```"), take_till(|c| c == '\n'), tag("\n")))(rest)?;
+
+    let (rest, code) = take_until_parser_success(code_internal, tag("```"))?;
+    let (rest, _code_end) = tag("```")(rest)?;
+
+    Ok((rest, Block::Code(Code::new(code.to_string()))))
+}
+
 fn collect_bullet_items(
     flat: &mut Vec<(usize, BulletItem)>,
     nested: &mut Vec<BulletItem>,
     current_indentation: usize,
 ) {
     loop {
-        if flat.is_empty() {
+        if !flat.is_empty() {
             let (indentation, _bullet_data) = &flat[0];
             // copy the data for borrowing rules
             let indentation = *indentation;
@@ -328,11 +340,13 @@ pub(crate) enum Block {
     Paragraph(Vec<Span>),
     BulletedList(Vec<BulletItem>),
     Picture(Picture),
+    Code(Code),
 }
 impl Block {
     fn is_picture(&self) -> bool {
         matches!(&self, Block::Picture(_))
     }
+
     fn unwrap_picture(self) -> Picture {
         if let Block::Picture(picture) = self {
             picture
@@ -548,6 +562,37 @@ some more text
     }
 
     #[test]
+    fn parse_slide_2() {
+        let text = r#"
+## Energy
+
+```
+! from calculate_energy https://github.com/Fluid-Dynamics-Group/hit3d/blob/master/src/write_data.f90#L127
+do i =1,nx
+	do j=1,ny
+		do k=1,nz
+			u = wrk(i,j,k,1)
+			v = wrk(i,j,k,2)
+			w = wrk(i,j,k,3)
+
+			energy = energy + u**2 + v**2 + w**2
+		end do
+	end do
+end do
+
+energy = energy * dx * dy * dz
+```
+
+"#;
+
+        let out = parse_slide(text);
+        dbg!(&out);
+        let out = out.unwrap();
+
+        assert_eq!(matches!(out.1.contents, ContentOptions::OnlyCode(_)), true)
+    }
+
+    #[test]
     fn parse_picture_1() {
         let text = "![caption](path)";
         let out = parse_block_as_picture(text);
@@ -558,5 +603,48 @@ some more text
             caption: "caption".to_string(),
         };
         assert_eq!(out.unwrap_picture(), expected);
+    }
+
+    #[test]
+    fn parse_code_1() {
+        let code = r#"
+```
+code here
+```
+        "#;
+
+        let out = parse_as_code(code);
+        dbg!(&out);
+        let out = out.unwrap().1;
+        let expected = Block::Code(Code::new("code here\n".to_string()));
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn parse_code_2() {
+        let code = r#"
+
+```
+! from calculate_energy https://github.com/Fluid-Dynamics-Group/hit3d/blob/master/src/write_data.f90#L127
+do i =1,nx
+	do j=1,ny
+		do k=1,nz
+			u = wrk(i,j,k,1)
+			v = wrk(i,j,k,2)
+			w = wrk(i,j,k,3)
+
+			energy = energy + u**2 + v**2 + w**2
+		end do
+	end do
+end do
+
+energy = energy * dx * dy * dz
+```
+        "#;
+
+        let out = parse_as_code(code);
+        dbg!(&out);
+        let out = out.unwrap().1;
+        assert_eq!(out.is_code(), true);
     }
 }

@@ -36,6 +36,34 @@ impl Picture {
 }
 
 #[derive(Debug, PartialEq)]
+pub(crate) struct Code {
+    language: String,
+    text: String,
+}
+
+impl Code {
+    pub(crate) fn new(text: String) -> Self {
+        Code {
+            language: "fortran".into(),
+            text,
+        }
+    }
+}
+
+impl<'a> Latex for Code {
+    fn to_latex(&self, buffer: &mut String) {
+        buffer.push_str(
+            r#"\begin{lstlisting}[language=fortran]
+"#,
+        );
+
+        buffer.push_str(&self.text);
+
+        buffer.push_str("\\end{lstlisting}")
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub(crate) struct LatexPicture<'a> {
     picture: &'a Picture,
     is_split: bool,
@@ -154,6 +182,7 @@ impl Latex for Block {
             Block::Picture(_) => {
                 panic!("pictures should be removed from blocks prior to processing")
             }
+            Block::Code(code) => code.to_latex(buffer),
         }
     }
 }
