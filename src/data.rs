@@ -42,20 +42,16 @@ pub(crate) struct Code {
 }
 
 impl Code {
-    pub(crate) fn new(text: String) -> Self {
-        Code {
-            language: "fortran".into(),
-            text,
-        }
+    pub(crate) fn new(text: String, language: String) -> Self {
+        Code { language, text }
     }
 }
 
 impl<'a> Latex for Code {
     fn to_latex(&self, buffer: &mut String) {
-        buffer.push_str(
-            r#"\begin{lstlisting}[language=fortran]
-"#,
-        );
+        buffer.push_str(r#"\begin{lstlisting}[language="#);
+        buffer.push_str(&self.language);
+        buffer.push_str("]\n");
 
         buffer.push_str(&self.text);
 

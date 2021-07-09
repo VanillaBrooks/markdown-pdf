@@ -185,14 +185,35 @@ fn parse_bullet_item(i: &str) -> IResult<&str, (usize, BulletItem)> {
 fn parse_as_code(i: &str) -> IResult<&str, Block> {
     let (rest, _whitespace) = take_till(|c| c != '\n')(i)?;
 
-    // TODO: parse the language used here
-    let (code_internal, _block_start) =
-        tuple((tag("```"), take_till(|c| c == '\n'), tag("\n")))(rest)?;
+    let (code_internal, header) = code_block_header(rest)?;
+
+    dbg!(&header);
 
     let (rest, code) = take_until_parser_success(code_internal, tag("```"))?;
     let (rest, _code_end) = tag("```")(rest)?;
 
-    Ok((rest, Block::Code(Code::new(code.to_string()))))
+    Ok((
+        rest,
+        Block::Code(Code::new(code.to_string(), header.language)),
+    ))
+}
+
+#[derive(Debug)]
+struct CodeHeader {
+    language: String,
+}
+
+fn code_block_header(i: &str) -> IResult<&str, CodeHeader> {
+    let (after_ticks, _ticks) = tag("```")(i)?;
+    let (rest, language_name) = take_till(|c| c == '\n')(after_ticks)?;
+    let (code_start, _newline) = tag("\n")(rest)?;
+
+    Ok((
+        code_start,
+        CodeHeader {
+            language: language_name.to_string(),
+        },
+    ))
 }
 
 fn collect_bullet_items(
@@ -589,7 +610,7 @@ energy = energy * dx * dy * dz
         dbg!(&out);
         let out = out.unwrap();
 
-        assert_eq!(matches!(out.1.contents, ContentOptions::OnlyCode(_)), true)
+        assert_eq!(matches!(out.1.contents, ContentOptions::OnlyText(_)), true)
     }
 
     #[test]
@@ -608,7 +629,7 @@ energy = energy * dx * dy * dz
     #[test]
     fn parse_code_1() {
         let code = r#"
-```
+```language
 code here
 ```
         "#;
@@ -616,7 +637,7 @@ code here
         let out = parse_as_code(code);
         dbg!(&out);
         let out = out.unwrap().1;
-        let expected = Block::Code(Code::new("code here\n".to_string()));
+        let expected = Block::Code(Code::new("code here\n".to_string(), "language".to_string()));
         assert_eq!(out, expected);
     }
 
@@ -645,6 +666,14 @@ energy = energy * dx * dy * dz
         let out = parse_as_code(code);
         dbg!(&out);
         let out = out.unwrap().1;
-        assert_eq!(out.is_code(), true);
+        assert_eq!(matches!(out, Block::Code(_)), true);
+    }
+
+    fn code_header_1() {
+        let text = "```python\n";
+        let out = code_block_header(text);
+        dbg!(&out);
+        let out = out.unwrap();
+        assert_eq!(&out.1.language, "python")
     }
 }

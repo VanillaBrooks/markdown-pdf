@@ -4,6 +4,34 @@
 \usepackage{float}
 \usepackage{hyperref}
 \usepackage{ulem}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\tiny,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\lstset{style=mystyle}
 
 \hypersetup{
 colorlinks=true,
@@ -20,7 +48,7 @@ urlcolor=cyan,
 \begin{document}
 \frame{\titlepage}
 
-\begin{frame}
+\begin{frame}[fragile]
     \frametitle{Title of slide 1}
 
 You can put regular text paragraphs here. Moreover, you can \textbf{bold your text} or \emph{italicize it} very
@@ -55,7 +83,7 @@ $$
 \end{frame}
 
 
-\begin{frame}
+\begin{frame}[fragile]
     \frametitle{Title Slide 2}
 
 
@@ -67,7 +95,7 @@ $$
 \end{frame}
 
 
-\begin{frame}
+\begin{frame}[fragile]
     \frametitle{Pictures with text are automatically vertically split}
 
 	\begin{minipage}{0.4\textwidth}
@@ -86,6 +114,61 @@ When you have a picture with text on the same slide, the area is automatically s
         \includegraphics[width=\textwidth]{./figs/pie_chart.jpg}
         \caption{Anoter figure caption here!}
     \end{figure}	\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+    \frametitle{Automatic Code Highlighting}
+
+\begin{lstlisting}[language=python]
+import matplotlib.pyplot as plt
+def plot_data(x,y, title):
+    plt.scatter(x,y)
+    plt.title(title)
+    plt.savefig("figure.png")
+
+if __name__ == "__main__":
+    print("plotting data")
+    plot_data(list(range(5)), [20,15,6,9,10])
+\end{lstlisting}
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+    \frametitle{In multiple languages!}
+
+\begin{lstlisting}[language=fortran]
+! calculate the kinetic energy of a flowfield
+subroutine calculate_energy(energy)
+    use m_work ! wrk arrays for velocity
+    use m_parameters ! dx, dy, dz
+
+    implicit none
+    integer:: i, j, k
+    real*8 :: energy, u, v, w
+
+    energy = 0
+
+    do i =1,nx
+        do j=1,ny
+            do k=1,nz
+                u = wrk(i,j,k,1)
+                v = wrk(i,j,k,2)
+                w = wrk(i,j,k,3)
+
+                energy = energy + u**2 + v**2 + w**2
+            end do
+        end do
+    end do
+
+    energy = energy * dx * dy * dz * 0.5
+
+end subroutine calculate_energy
+\end{lstlisting}
+
 
 \end{frame}
 
