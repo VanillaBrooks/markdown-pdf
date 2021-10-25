@@ -1,6 +1,7 @@
 mod data;
 mod latex;
 mod parse;
+mod postprocess;
 
 use argh::FromArgs;
 use std::path::PathBuf;
@@ -37,9 +38,11 @@ fn wrapper() -> Result<(), Error> {
 
     let f = std::fs::File::open(args.markdown_input)?;
     let parse_results = parse::parse_markdown(f)?;
+    let processed_results = postprocess::postprocess(parse_results);
+
     let out = std::fs::File::create(args.output_directory)?;
 
-    latex::write_latex(out, parse_results)?;
+    latex::write_latex(out, processed_results)?;
     Ok(())
 }
 

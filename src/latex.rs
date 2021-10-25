@@ -51,6 +51,7 @@ fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result
 \usepackage{ulem}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{esint}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -101,6 +102,7 @@ urlcolor=cyan,
 \author{"#
             .as_bytes(),
     )?;
+
     writer.write_all(author.as_bytes())?;
 
     writer.write_all(

@@ -91,6 +91,7 @@ fn parse_block<'a>(i: &'a str) -> IResult<&'a str, Vec<Block>> {
         tuple((
             whitespace,
             alt((
+                parse_as_directive,
                 parse_block_as_picture,
                 parse_block_as_bullets,
                 parse_as_code,
@@ -196,6 +197,14 @@ fn parse_as_code(i: &str) -> IResult<&str, Block> {
         rest,
         Block::Code(Code::new(code.to_string(), header.language)),
     ))
+}
+
+fn parse_as_directive(i: &str) -> IResult<&str, Block> {
+    let (rest, _whitespace) = take_till(|c| c != '\n')(i)?;
+
+    let (rest, _newslide_header) = tag("%NEWSLIDE")(rest)?;
+
+    Ok((rest, Block::Directive(Directive::NewSlide)))
 }
 
 #[derive(Debug)]
@@ -356,13 +365,20 @@ where
     Ok((current_slice, i.get(0..idx).unwrap()))
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Block {
     Paragraph(Vec<Span>),
     BulletedList(Vec<BulletItem>),
     Picture(Picture),
     Code(Code),
+    Directive(Directive),
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum Directive {
+    NewSlide,
+}
+
 impl Block {
     fn is_picture(&self) -> bool {
         matches!(&self, Block::Picture(_))
@@ -377,7 +393,7 @@ impl Block {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum BulletItem {
     // a single bullet point that is at the same indentation level
     Single(Vec<Span>),
@@ -385,7 +401,7 @@ pub(crate) enum BulletItem {
     Nested(Vec<BulletItem>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Span {
     Bold(String),          //
     Strikethrough(String), //
@@ -669,11 +685,41 @@ energy = energy * dx * dy * dz
         assert_eq!(matches!(out, Block::Code(_)), true);
     }
 
+    #[test]
     fn code_header_1() {
         let text = "```python\n";
         let out = code_block_header(text);
         dbg!(&out);
         let out = out.unwrap();
         assert_eq!(&out.1.language, "python")
+    }
+
+    #[test]
+    fn slide_with_breaks() {
+        let text = "\n\n
+            ## Some Slide
+
+            text1
+
+            %NEWSLIDE
+
+            text2";
+
+        let out = parse_slide(text);
+
+        let out = out.unwrap().1;
+
+        assert_eq!(
+            out.title,
+            Title::from(vec![Span::Text("Some Slide".into())])
+        );
+
+        let expected_blocks = vec![
+            Block::Paragraph(vec![Span::Text("text1".into())]),
+            Block::Directive(Directive::NewSlide),
+            Block::Paragraph(vec![Span::Text("text2".into())]),
+        ];
+
+        assert_eq!(out.contents, ContentOptions::OnlyText(expected_blocks));
     }
 }

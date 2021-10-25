@@ -14,14 +14,14 @@ pub(crate) struct Slide {
     pub(crate) contents: ContentOptions,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ContentOptions {
     OnlyText(Vec<Block>),
     OnlyPicture(Picture),
     TextAndPicture(Vec<Block>, Picture),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Picture {
     Path { path: String, caption: String },
     Link { link: String, caption: String },
@@ -35,7 +35,7 @@ impl Picture {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Code {
     language: String,
     text: String,
@@ -84,7 +84,7 @@ impl<'a> LatexPicture<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Title {
     pub(crate) title: Vec<Span>,
 }
@@ -177,6 +177,9 @@ impl Latex for Block {
             Block::BulletedList(span_spans) => span_spans.to_latex(buffer),
             Block::Picture(_) => {
                 panic!("pictures should be removed from blocks prior to processing")
+            }
+            Block::Directive(_) => {
+                panic!("directives should have been remove from the presentation as a postprocess step")
             }
             Block::Code(code) => code.to_latex(buffer),
         }
