@@ -52,6 +52,7 @@ fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{esint}
+\usepackage{gensymb}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}

@@ -74,13 +74,14 @@ fn text_directive_handler(contents: Vec<Block>) -> Vec<Vec<Block>> {
 fn text_picture_handler(title: Title, contents: Vec<Block>, picture: Picture) -> Vec<Slide> {
     text_directive_handler(contents)
         .into_iter()
-        .map(|contents| Slide {
-            title: title.clone(),
-            contents: ContentOptions::TextAndPicture(contents, picture.clone()),
+        .map(|contents| {
+            Slide {
+                title: title.clone(),
+                contents: ContentOptions::TextAndPicture(contents, picture.clone()),
+            }
         })
         .collect()
 }
-
 
 #[cfg(test)]
 mod tests{
