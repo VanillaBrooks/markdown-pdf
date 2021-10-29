@@ -582,12 +582,11 @@ AUTHOR=Author Name
 
         let out = parse_start_header(text);
         dbg!(&out);
-        let (_, (title, author)) = out.unwrap();
-        let expected_title = Title {
-            title: vec![Span::Text("Presentation Title".to_string())],
-        };
-        assert_eq!(title, expected_title);
-        assert_eq!(author, "Author Name");
+        let (_, first_slide) = out.unwrap();
+        let expected_title = vec![Span::Text("Presentation Title".to_string())];
+
+        assert_eq!(first_slide.title, expected_title);
+        assert_eq!(first_slide.author, "Author Name");
     }
 
     #[test]
@@ -605,10 +604,10 @@ some more text
         dbg!(&out);
         let out = out.unwrap();
 
-        let expected = ContentOptions::OnlyText(vec![
+        let expected = vec![
             Block::Paragraph(vec![Span::Text("some inner text".to_string())]),
             Block::Paragraph(vec![Span::Text("some more text".to_string())]),
-        ]);
+        ];
 
         assert_eq!(out.1.contents, expected);
     }
@@ -641,7 +640,9 @@ energy = energy * dx * dy * dz
         dbg!(&out);
         let out = out.unwrap();
 
-        assert_eq!(matches!(out.1.contents, ContentOptions::OnlyText(_)), true)
+        for c in out.1.contents {
+            assert_eq!(matches!(c, Block::Picture(_)), false)
+        }
     }
 
     #[test]
@@ -650,11 +651,12 @@ energy = energy * dx * dy * dz
         let out = parse_block_as_picture(text);
         dbg!(&out);
         let out = out.unwrap().1;
-        let expected = Picture::Path {
+        let expected = ParsePicture {
             path: "path".to_string(),
-            caption: "caption".to_string(),
+            caption: Some("caption".to_string()),
+            directive: None
         };
-        assert_eq!(out.unwrap_picture(), expected);
+        assert_eq!(out, Block::Picture(expected));
     }
 
     #[test]
@@ -726,7 +728,7 @@ energy = energy * dx * dy * dz
 
         assert_eq!(
             out.title,
-            Title::from(vec![Span::Text("Some Slide".into())])
+            vec![Span::Text("Some Slide".into())]
         );
 
         let expected_blocks = vec![
@@ -735,7 +737,7 @@ energy = energy * dx * dy * dz
             Block::Paragraph(vec![Span::Text("text2".into())]),
         ];
 
-        assert_eq!(out.contents, ContentOptions::OnlyText(expected_blocks));
+        assert_eq!(out.contents, expected_blocks);
     }
 
     #[test]

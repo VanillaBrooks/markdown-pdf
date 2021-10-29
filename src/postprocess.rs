@@ -126,26 +126,6 @@ fn to_content_options(slide_content: Vec<Block>) -> ContentOptions {
     }
 }
 
-fn text_with_pictures(title: Vec<Span>, contents: Vec<Block>) -> Vec<Slide> {
-    // first organize the slides based on the directives
-    let slides = text_directive_handler(contents);
-
-    // then map each of the slides into either plain text or a text with picture
-    slides.into_iter()
-        .map(to_content_options)
-        .map(|contents| Slide{ title: title.clone().into(), contents })
-        .collect()
-}
-
-fn only_text_with_directives(title: Vec<Span>, contents: Vec<Block>) -> Vec<Slide> {
-    todo!()
-}
-
-// we have a slide that just contains some directives, and some pictures
-fn picture_with_directives(title: Vec<Span>, contents: Vec<Block>) -> Vec<Slide> {
-    todo!()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
