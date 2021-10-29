@@ -1,4 +1,5 @@
-use super::parse::{Block, BulletItem, Span};
+use super::parse::{Block, BulletItem, Span, PictureDirective, ParsePicture};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub(crate) struct Presentation {
@@ -22,16 +23,25 @@ pub(crate) enum ContentOptions {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Picture {
-    Path { path: String, caption: String },
-    Link { link: String, caption: String },
+pub(crate) struct Picture {
+    path: String,
+    caption: Option<String>,
+    directive: Option<PictureDirective>
 }
+
 impl Picture {
     fn to_latex_picture(&self, is_split: bool) -> LatexPicture {
         LatexPicture {
             picture: &self,
             is_split,
         }
+    }
+}
+
+impl From<ParsePicture> for Picture {
+    fn from(x: ParsePicture) -> Self {
+        let ParsePicture {path, caption, directive} = x;
+        Self{path, caption, directive}
     }
 }
 
@@ -67,20 +77,11 @@ pub(crate) struct LatexPicture<'a> {
 
 impl<'a> LatexPicture<'a> {
     fn get_path(&self) -> String {
-        match &self.picture {
-            Picture::Path { path, .. } => path.clone(),
-            Picture::Link { .. } => {
-                // TODO: download the picture
-                panic!("does not currently handle hyperlinks to pictures");
-            }
-        }
+        self.picture.path.clone()
     }
 
-    fn caption(&self) -> &str {
-        match &self.picture {
-            Picture::Path { caption, .. } => caption,
-            Picture::Link { caption, .. } => &caption,
-        }
+    fn caption(&self) -> Option<&str> {
+        self.picture.caption.as_ref().map(|x| x.as_str())
     }
 }
 
@@ -127,15 +128,16 @@ impl<'a> Latex for LatexPicture<'a> {
         }
 
         buffer.push_str(&path);
-        buffer.push_str(
-            r#"}
-        \caption{"#,
-        );
-        buffer.push_str(self.caption());
-        buffer.push_str(
-            r#"}
-    \end{figure}"#,
-        );
+        buffer.push_str(r#"}"#);
+
+        // only add a caption if we have one
+        if let Some(caption) = self.caption() {
+            buffer.push_str(r#"\caption{"#);
+            buffer.push_str(caption);
+            buffer.push_str( r#"}"#);
+        }
+        
+        buffer.push_str(r#"\end{figure}"#)
     }
 }
 
