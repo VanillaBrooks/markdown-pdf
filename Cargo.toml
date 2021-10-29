@@ -1,6 +1,6 @@
 [package]
 name = "markdown-pdf"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["VanillaBrooks <brooks@karlik.org>"]
 edition = "2021"
 
@@ -9,4 +9,4 @@ edition = "2021"
 [dependencies]
 thiserror = "1.0.24"
 argh = "0.1.4"
-nom = "6.1.2"
+nom = "7.0.0"

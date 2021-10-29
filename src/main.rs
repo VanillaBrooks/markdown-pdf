@@ -9,6 +9,10 @@ use std::path::PathBuf;
 #[derive(FromArgs)]
 /// Generate presentations in latex from markdown
 struct MarkdownPdfArguments {
+    #[argh(switch)]
+    /// dont respect %NEWSLIDE directives
+    ignore_newslide: bool,
+
     #[argh(positional)]
     /// path/to/markdown.md
     markdown_input: PathBuf,
@@ -38,7 +42,7 @@ fn wrapper() -> Result<(), Error> {
 
     let f = std::fs::File::open(args.markdown_input)?;
     let parse_results = parse::parse_markdown(f)?;
-    let processed_results = postprocess::postprocess(parse_results);
+    let processed_results = postprocess::postprocess(parse_results, args.ignore_newslide);
 
     let out = std::fs::File::create(args.output_directory)?;
 

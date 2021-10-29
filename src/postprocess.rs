@@ -1,11 +1,11 @@
 use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
 use super::parse::{Span, Block, Document, ParsedTitle, ParsedSlide, Directive, PictureDirective};
 
-pub(crate) fn postprocess(presentation: Document) -> Presentation {
+pub(crate) fn postprocess(presentation: Document, ignore_newslide:bool) -> Presentation {
     let slides = presentation
         .slides
         .into_iter()
-        .map(process_slide)
+        .map(|x| process_slide(x, ignore_newslide))
         .flatten()
         .collect::<Vec<_>>();
 
@@ -16,43 +16,19 @@ pub(crate) fn postprocess(presentation: Document) -> Presentation {
     }
 }
 
-fn process_slide(slide: ParsedSlide) -> Vec<Slide> {
+fn process_slide(slide: ParsedSlide, ignore_newslide: bool) -> Vec<Slide> {
     // first organize the slides based on the directives
-    let slides = text_directive_handler(slide.contents);
+    let slides = text_directive_handler(slide.contents, ignore_newslide);
 
     // then map each of the slides into either plain text or a text with picture
     slides.into_iter()
         .map(to_content_options)
         .map(|contents| Slide{ title: slide.title.clone().into(), contents })
         .collect()
-
-    // // if we know that we have a slide that only contains a picture
-    // // with potentially some directives...
-    // let picture_or_directive =
-    //     slide.contents.iter().map(|x| matches!(x, Block::Directive(_)) || matches!(x, Block::Picture(_)))
-    //     .find(|x| *x == false);
-
-    // if picture_or_directive.is_none() {
-    //     return picture_with_directives(slide.title, slide.contents)
-    // }
-
-    // // check to see if the slide only contains text w/ some directives
-    // // and there are no pictures
-    // let only_text =
-    //     slide.contents.iter().map(|x| matches!(x, Block::Directive(_)) && !matches!(x, Block::Picture(_)))
-    //     .find(|x| *x == false);
-
-    // if only_text.is_none() {
-    //     return only_text_with_directives(slide.title, slide.contents)
-    // }
-
-    // // otherwise, if we are here then we know there is a mixture of text and pictures
-    // text_with_pictures(slide.title, slide.contents)
-
 }
 
 /// this function cannot be called with a picture
-fn text_directive_handler(contents: Vec<Block>) -> Vec<Vec<Block>> {
+fn text_directive_handler(contents: Vec<Block>, ignore_newslide: bool) -> Vec<Vec<Block>> {
     let mut current_slide_contents = Vec::new();
     let mut out = Vec::new();
 
@@ -62,13 +38,17 @@ fn text_directive_handler(contents: Vec<Block>) -> Vec<Vec<Block>> {
             match direc {
                 // we need to create a new slide from these contents
                 Directive::NewSlide => {
-                    // copy the current contents, save the slide, and then copy the new contents
-                    // back
-                    let tmp_contents = current_slide_contents.clone();
 
-                    out.push(current_slide_contents);
+                    // as long as we dont have a CLI argument to ignore these directives...
+                    if !ignore_newslide {
+                        // copy the current contents, save the slide, and then copy the new contents
+                        // back
+                        let tmp_contents = current_slide_contents.clone();
 
-                    current_slide_contents = tmp_contents;
+                        out.push(current_slide_contents);
+
+                        current_slide_contents = tmp_contents;
+                    }
                 }
             }
         } else {

@@ -154,19 +154,32 @@ impl Latex for ContentOptions {
                 picture.to_latex_picture(false).to_latex(buffer);
             }
             ContentOptions::TextAndPicture(content, picture) => {
-                buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
 
-                for c in content {
-                    c.to_latex(buffer)
+                match picture.directive {
+                    Some(PictureDirective::Vertical) => {
+
+                        for c in content {
+                            c.to_latex(buffer)
+                        }
+
+                        picture.to_latex_picture(false).to_latex(buffer);
+                    }
+                    None => {
+                        buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
+
+                        for c in content {
+                            c.to_latex(buffer)
+                        }
+
+                        buffer.push_str("\n\t\\end{minipage}%\n");
+                        buffer.push_str("\t\\hfill\n");
+                        buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
+
+                        picture.to_latex_picture(true).to_latex(buffer);
+
+                        buffer.push_str("\t\\end{minipage}\n");
+                    }
                 }
-
-                buffer.push_str("\n\t\\end{minipage}%\n");
-                buffer.push_str("\t\\hfill\n");
-                buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
-
-                picture.to_latex_picture(true).to_latex(buffer);
-
-                buffer.push_str("\t\\end{minipage}\n");
             }
         }
     }
