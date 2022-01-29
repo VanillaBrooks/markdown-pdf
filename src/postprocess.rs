@@ -1,7 +1,7 @@
 use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
-use super::parse::{Span, Block, Document, ParsedTitle, ParsedSlide, Directive, PictureDirective};
+use super::parse::{Block, Directive, Document, ParsedSlide, ParsedTitle, PictureDirective, Span};
 
-pub(crate) fn postprocess(presentation: Document, ignore_newslide:bool) -> Presentation {
+pub(crate) fn postprocess(presentation: Document, ignore_newslide: bool) -> Presentation {
     let slides = presentation
         .slides
         .into_iter()
@@ -21,9 +21,13 @@ fn process_slide(slide: ParsedSlide, ignore_newslide: bool) -> Vec<Slide> {
     let slides = text_directive_handler(slide.contents, ignore_newslide);
 
     // then map each of the slides into either plain text or a text with picture
-    slides.into_iter()
+    slides
+        .into_iter()
         .map(to_content_options)
-        .map(|contents| Slide{ title: slide.title.clone().into(), contents })
+        .map(|contents| Slide {
+            title: slide.title.clone().into(),
+            contents,
+        })
         .collect()
 }
 
@@ -38,7 +42,6 @@ fn text_directive_handler(contents: Vec<Block>, ignore_newslide: bool) -> Vec<Ve
             match direc {
                 // we need to create a new slide from these contents
                 Directive::NewSlide => {
-
                     // as long as we dont have a CLI argument to ignore these directives...
                     if !ignore_newslide {
                         // copy the current contents, save the slide, and then copy the new contents
@@ -66,7 +69,7 @@ fn text_directive_handler(contents: Vec<Block>, ignore_newslide: bool) -> Vec<Ve
 fn is_only_text(current_contents: &[Block]) -> bool {
     for c in current_contents {
         if matches!(c, Block::Picture(_)) {
-            return false
+            return false;
         }
     }
     true
@@ -75,7 +78,7 @@ fn is_only_text(current_contents: &[Block]) -> bool {
 fn is_only_picture(current_contents: &[Block]) -> bool {
     for c in current_contents {
         if !matches!(c, Block::Picture(_)) {
-            return false
+            return false;
         }
     }
     true
@@ -86,20 +89,21 @@ fn to_content_options(slide_content: Vec<Block>) -> ContentOptions {
     if is_only_text(&slide_content) {
         ContentOptions::OnlyText(slide_content)
     } else if is_only_picture(&slide_content) {
-
         // grab the first picture in the slides
-        let picture = match slide_content.into_iter().next().unwrap(){
+        let picture = match slide_content.into_iter().next().unwrap() {
             Block::Picture(x) => x,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         ContentOptions::OnlyPicture(picture.into())
     } else {
-        let (picture, text) : (Vec<_>, Vec<_>) = slide_content.into_iter() .partition(|x| matches!(x, Block::Picture(_)));
+        let (picture, text): (Vec<_>, Vec<_>) = slide_content
+            .into_iter()
+            .partition(|x| matches!(x, Block::Picture(_)));
 
-        let picture = match picture.into_iter().next().unwrap(){
+        let picture = match picture.into_iter().next().unwrap() {
             Block::Picture(x) => x,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         ContentOptions::TextAndPicture(text, picture.into())
