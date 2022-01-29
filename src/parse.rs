@@ -201,11 +201,9 @@ fn parse_bullet_item(i: &str) -> IResult<&str, (usize, BulletItem)> {
 }
 
 fn parse_as_code(i: &str) -> IResult<&str, Block> {
+
     let (rest, _whitespace) = take_till(|c| c != '\n')(i)?;
-
     let (code_internal, header) = code_block_header(rest)?;
-
-    dbg!(&header);
 
     let (rest, code) = take_until_parser_success(code_internal, tag("```"))?;
     let (rest, _code_end) = tag("```")(rest)?;
@@ -374,8 +372,13 @@ where
         if let Some(slice) = i.get(idx..) {
             current_slice = slice
         } else {
-            idx -= 1;
-            break;
+            if idx >= i.len() {
+                // TODO: this might need to be an error - im unsure as of now
+                idx -= 1;
+                break
+            } else {
+                continue
+            }
         }
     }
 
@@ -749,6 +752,23 @@ energy = energy * dx * dy * dz
         let expected = ParsePicture { path: "somepicture".to_string(), caption: None, directive: Some(PictureDirective::Vertical) };
 
         assert_eq!(picture, Block::Picture(expected));
-        
+    }
+
+    #[test]
+    fn non_ascii_characters() {
+        let slide = "
+            ## Slide Name
+
+            ```
+            .
+            └── example_namespace
+
+            ```
+        ";
+
+        let output = parse_slide(&slide);
+        dbg!(&output);
+
+        output.unwrap();
     }
 }

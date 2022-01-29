@@ -127,7 +127,7 @@ mod tests {
             paragraph("2"),
         ];
 
-        let out_blocks = text_directive_handler(blocks);
+        let out_blocks = text_directive_handler(blocks, false);
 
         let slide_1 = vec![paragraph("1")];
 

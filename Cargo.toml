@@ -9,4 +9,4 @@ edition = "2021"
 [dependencies]
 thiserror = "1.0.24"
 argh = "0.1.4"
-nom = "7.0.0"
+nom = "7.1.0"
