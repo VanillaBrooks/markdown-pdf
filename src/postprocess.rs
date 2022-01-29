@@ -1,5 +1,5 @@
-use super::data::{ContentOptions, Picture, Presentation, Slide, Title};
-use super::parse::{Block, Directive, Document, ParsedSlide, ParsedTitle, PictureDirective, Span};
+use super::data::{ContentOptions, Presentation, Slide};
+use super::parse::{Block, Directive, Document, ParsedSlide};
 
 pub(crate) fn postprocess(presentation: Document, ignore_newslide: bool) -> Presentation {
     let slides = presentation

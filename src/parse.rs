@@ -1,8 +1,8 @@
-use super::data::{Code, ContentOptions, Picture, Presentation, Slide, Title};
+use super::data::{Code};
 use super::Error;
 use std::cmp::Ordering;
 use std::io::Read;
-use std::path::PathBuf;
+
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till, take_until};
@@ -178,7 +178,7 @@ fn picture_directive(i: &str) -> IResult<&str, PictureDirective> {
         let (rest, _) = tag("%HEIGHT=")(i)?;
         let (rest, width_query) = take_until("\n")(rest)?;
 
-        Ok((rest, PictureDirective::Width(width_query.to_string())))
+        Ok((rest, PictureDirective::Height(width_query.to_string())))
     };
 
     let (rest, directive) = alt((vertical, width, height))(after_whitespace)?;
@@ -432,29 +432,6 @@ pub(crate) enum PictureDirective {
     Height(String),
 }
 
-impl PictureDirective {
-    pub(crate) fn is_orientation(&self) -> bool {
-        match &self {
-            Self::Vertical => true,
-            Self::Width(_) | Self::Height(_) => false,
-        }
-    }
-
-    pub(crate) fn is_width(&self) -> bool {
-        match &self {
-            Self::Width(_) => true,
-            Self::Vertical | Self::Height(_) => false,
-        }
-    }
-
-    pub(crate) fn is_height(&self) -> bool {
-        match &self {
-            Self::Height(_) => true,
-            Self::Vertical | Self::Width(_) => false,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Directive {
     NewSlide,
@@ -553,7 +530,7 @@ mod tests {
         let text = "\n\nblock text here\n\nanother block of something here \n## a new header here";
         let out = parse_block(text);
         dbg!(&out);
-        let out = out.unwrap();
+        let _out = out.unwrap();
     }
 
     #[test]
@@ -580,7 +557,7 @@ mod tests {
         let text = "* bullet text";
         let out = parse_bullet_item(text);
         dbg!(&out);
-        let out = out.unwrap();
+        let _out = out.unwrap();
     }
 
     #[test]
