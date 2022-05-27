@@ -1,6 +1,5 @@
 use super::parse::{Block, BulletItem, ParsePicture, PictureDirective, Span};
 
-
 #[derive(Debug)]
 pub(crate) struct Presentation {
     pub(crate) title: Title,
@@ -42,13 +41,9 @@ impl Picture {
         LatexPicture {
             picture: &self,
             is_split,
-            width: self
-                .width
-                .as_ref().map(|x| x.as_str()),
+            width: self.width.as_ref().map(|x| x.as_str()),
             // TODO: might need to fix this for split middle
-            height: self
-                .width
-                .as_ref().map(|x| x.as_str()),
+            height: self.width.as_ref().map(|x| x.as_str()),
         }
     }
 }
@@ -170,7 +165,7 @@ impl<'a> Latex for LatexPicture<'a> {
         \centering"#,
         );
 
-        let make_include_graphics = |buffer:&mut String, height: &str, width: &str| {
+        let make_include_graphics = |buffer: &mut String, height: &str, width: &str| {
             buffer.push_str("\n\\includegraphics[");
             buffer.push_str(width);
             buffer.push_str(",");
@@ -196,7 +191,6 @@ impl<'a> Latex for LatexPicture<'a> {
             };
 
             make_include_graphics(buffer, &height, &width);
-
         } else {
             //
             // DEFAULTS FOR THIS SECTION

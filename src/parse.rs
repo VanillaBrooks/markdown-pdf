@@ -1,8 +1,7 @@
-use super::data::{Code};
+use super::data::Code;
 use super::Error;
 use std::cmp::Ordering;
 use std::io::Read;
-
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till, take_until};
@@ -825,8 +824,7 @@ energy = energy * dx * dy * dz
             %VERTICAL
             %WIDTH=SOMETHING
 
-            REST"
-            ;
+            REST";
 
         let slide = parse_slide(text);
         dbg!(&slide);
