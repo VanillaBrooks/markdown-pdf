@@ -51,6 +51,7 @@ fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result
 \usepackage{ulem}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{cancel}
 \usepackage{esint}
 \usepackage{gensymb}
 \usepackage{mathtools}

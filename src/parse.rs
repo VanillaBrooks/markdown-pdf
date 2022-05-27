@@ -1,8 +1,8 @@
-use super::data::{Code, ContentOptions, Picture, Presentation, Slide, Title};
+use super::data::{Code};
 use super::Error;
 use std::cmp::Ordering;
 use std::io::Read;
-use std::path::PathBuf;
+
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till, take_until};
@@ -128,13 +128,18 @@ fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
     let (rest, location) = take_till(|c| c == ')')(location_start)?;
     let (mut rest, _) = tag(")")(rest)?;
 
-    let directive = 
-        if let Ok((new_rest, directive)) = picture_directive(rest) {
+    println!("searching for picture directives");
+
+    let directive = if let Ok((new_rest, directive)) = many0(picture_directive)(rest) {
+        if directive.len() == 0 {
+            None
+        } else {
             rest = new_rest;
             Some(directive)
-        } else {
-            None
-        };
+        }
+    } else {
+        None
+    };
 
     let caption = if caption.len() == 0 {
         None
@@ -156,9 +161,29 @@ fn parse_block_as_picture(i: &str) -> IResult<&str, Block> {
 fn picture_directive(i: &str) -> IResult<&str, PictureDirective> {
     let whitespace = take_till(|c| c != ' ' && c != '\n' && c != '\t');
     let (after_whitespace, _) = whitespace(i)?;
-    let (rest, _) =  tag("%VERTICAL")(after_whitespace)?;
 
-    Ok((rest, PictureDirective::Vertical))
+    let vertical = |i| -> IResult<&str, PictureDirective> {
+        let (rest, _) = tag("%VERTICAL")(i)?;
+        Ok((rest, PictureDirective::Vertical))
+    };
+
+    let width = |i| -> IResult<&str, PictureDirective> {
+        let (rest, _) = tag("%WIDTH=")(i)?;
+        let (rest, width_query) = take_until("\n")(rest)?;
+
+        Ok((rest, PictureDirective::Width(width_query.to_string())))
+    };
+
+    let height = |i| -> IResult<&str, PictureDirective> {
+        let (rest, _) = tag("%HEIGHT=")(i)?;
+        let (rest, width_query) = take_until("\n")(rest)?;
+
+        Ok((rest, PictureDirective::Height(width_query.to_string())))
+    };
+
+    let (rest, directive) = alt((vertical, width, height))(after_whitespace)?;
+
+    Ok((rest, directive))
 }
 
 fn parse_block_as_bullets(i: &str) -> IResult<&str, Block> {
@@ -202,10 +227,7 @@ fn parse_bullet_item(i: &str) -> IResult<&str, (usize, BulletItem)> {
 
 fn parse_as_code(i: &str) -> IResult<&str, Block> {
     let (rest, _whitespace) = take_till(|c| c != '\n')(i)?;
-
     let (code_internal, header) = code_block_header(rest)?;
-
-    dbg!(&header);
 
     let (rest, code) = take_until_parser_success(code_internal, tag("```"))?;
     let (rest, _code_end) = tag("```")(rest)?;
@@ -374,8 +396,13 @@ where
         if let Some(slice) = i.get(idx..) {
             current_slice = slice
         } else {
-            idx -= 1;
-            break;
+            if idx >= i.len() {
+                // TODO: this might need to be an error - im unsure as of now
+                idx -= 1;
+                break;
+            } else {
+                continue;
+            }
         }
     }
 
@@ -395,12 +422,14 @@ pub(crate) enum Block {
 pub(crate) struct ParsePicture {
     pub(crate) path: String,
     pub(crate) caption: Option<String>,
-    pub(crate) directive: Option<PictureDirective>,
+    pub(crate) directive: Option<Vec<PictureDirective>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum PictureDirective {
-    Vertical
+    Vertical,
+    Width(String),
+    Height(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -501,7 +530,7 @@ mod tests {
         let text = "\n\nblock text here\n\nanother block of something here \n## a new header here";
         let out = parse_block(text);
         dbg!(&out);
-        let out = out.unwrap();
+        let _out = out.unwrap();
     }
 
     #[test]
@@ -528,7 +557,7 @@ mod tests {
         let text = "* bullet text";
         let out = parse_bullet_item(text);
         dbg!(&out);
-        let out = out.unwrap();
+        let _out = out.unwrap();
     }
 
     #[test]
@@ -654,7 +683,7 @@ energy = energy * dx * dy * dz
         let expected = ParsePicture {
             path: "path".to_string(),
             caption: Some("caption".to_string()),
-            directive: None
+            directive: None,
         };
         assert_eq!(out, Block::Picture(expected));
     }
@@ -726,10 +755,7 @@ energy = energy * dx * dy * dz
 
         let out = out.unwrap().1;
 
-        assert_eq!(
-            out.title,
-            vec![Span::Text("Some Slide".into())]
-        );
+        assert_eq!(out.title, vec![Span::Text("Some Slide".into())]);
 
         let expected_blocks = vec![
             Block::Paragraph(vec![Span::Text("text1".into())]),
@@ -746,9 +772,83 @@ energy = energy * dx * dy * dz
         let out = parse_block_as_picture(text).unwrap();
         let picture = out.1;
 
-        let expected = ParsePicture { path: "somepicture".to_string(), caption: None, directive: Some(PictureDirective::Vertical) };
+        let expected = ParsePicture {
+            path: "somepicture".to_string(),
+            caption: None,
+            directive: Some(vec![PictureDirective::Vertical]),
+        };
 
         assert_eq!(picture, Block::Picture(expected));
-        
+    }
+
+    #[test]
+    fn non_ascii_characters() {
+        let slide = "
+            ## Slide Name
+
+            ```
+            .
+            └── example_namespace
+
+            ```
+        ";
+
+        let output = parse_slide(&slide);
+        dbg!(&output);
+
+        output.unwrap();
+    }
+
+    #[test]
+    fn multiple_picture_directives() {
+        let text = "%VERTICAL\n%WIDTH=SOMETHING\nREST";
+
+        let first = picture_directive(text);
+        dbg!(&first);
+        let (rest, dir1) = first.unwrap();
+
+        let second = picture_directive(rest);
+        dbg!(&second);
+        let (rest, dir2) = second.unwrap();
+
+        assert!(dir1 == PictureDirective::Vertical);
+        assert!(dir2 == PictureDirective::Width("SOMETHING".into()));
+        assert!(rest == "\nREST");
+    }
+
+    #[test]
+    fn slide_multiple_directives() {
+        let text = "
+            ## Slide Name
+
+            ![caption](./image/path)
+            %VERTICAL
+            %WIDTH=SOMETHING
+
+            REST"
+            ;
+
+        let slide = parse_slide(text);
+        dbg!(&slide);
+
+        let slide = slide.unwrap();
+
+        dbg!(&slide.1.contents);
+
+        let output = match &slide.1.contents[0] {
+            Block::Picture(x) => x,
+            _ => panic!("unexpected slide"),
+        };
+
+        let expected = ParsePicture {
+            path: "./image/path".into(),
+            caption: Some("caption".into()),
+            directive: Some(vec![
+                PictureDirective::Vertical,
+                PictureDirective::Width("SOMETHING".into()),
+            ]),
+        };
+
+        assert_eq!(&expected, output);
     }
 }

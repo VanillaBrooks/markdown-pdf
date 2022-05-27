@@ -1,5 +1,5 @@
-use super::parse::{Block, BulletItem, Span, PictureDirective, ParsePicture};
-use std::path::PathBuf;
+use super::parse::{Block, BulletItem, ParsePicture, PictureDirective, Span};
+
 
 #[derive(Debug)]
 pub(crate) struct Presentation {
@@ -26,7 +26,15 @@ pub(crate) enum ContentOptions {
 pub(crate) struct Picture {
     path: String,
     caption: Option<String>,
-    directive: Option<PictureDirective>
+    orientation: Orientation,
+    width: Option<String>,
+    height: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum Orientation {
+    Vertical,
+    Horizonal,
 }
 
 impl Picture {
@@ -34,14 +42,59 @@ impl Picture {
         LatexPicture {
             picture: &self,
             is_split,
+            width: self
+                .width
+                .as_ref().map(|x| x.as_str()),
+            // TODO: might need to fix this for split middle
+            height: self
+                .width
+                .as_ref().map(|x| x.as_str()),
         }
     }
 }
 
 impl From<ParsePicture> for Picture {
     fn from(x: ParsePicture) -> Self {
-        let ParsePicture {path, caption, directive} = x;
-        Self{path, caption, directive}
+        let ParsePicture {
+            path,
+            caption,
+            directive,
+        } = x;
+
+        let (width, height, orientation) = if let Some(directives) = directive {
+            let width: Option<String> = directives.iter().find_map(|x| match x {
+                PictureDirective::Vertical => None,
+                PictureDirective::Width(x) => Some(x.clone()),
+                PictureDirective::Height(_) => None,
+            });
+
+            let height: Option<String> = directives.iter().find_map(|x| match x {
+                PictureDirective::Vertical => None,
+                PictureDirective::Width(_) => None,
+                PictureDirective::Height(x) => Some(x.clone()),
+            });
+
+            let orientation: Orientation = directives
+                .iter()
+                .find_map(|x| match x {
+                    PictureDirective::Vertical => Some(Orientation::Vertical),
+                    PictureDirective::Width(_) => None,
+                    PictureDirective::Height(_) => None,
+                })
+                .unwrap_or(Orientation::Horizonal);
+
+            (width, height, orientation)
+        } else {
+            (None, None, Orientation::Horizonal)
+        };
+
+        Self {
+            path,
+            caption,
+            width,
+            height,
+            orientation,
+        }
     }
 }
 
@@ -73,6 +126,8 @@ impl<'a> Latex for Code {
 pub(crate) struct LatexPicture<'a> {
     picture: &'a Picture,
     is_split: bool,
+    width: Option<&'a str>,
+    height: Option<&'a str>,
 }
 
 impl<'a> LatexPicture<'a> {
@@ -115,16 +170,51 @@ impl<'a> Latex for LatexPicture<'a> {
         \centering"#,
         );
 
+        let make_include_graphics = |buffer:&mut String, height: &str, width: &str| {
+            buffer.push_str("\n\\includegraphics[");
+            buffer.push_str(width);
+            buffer.push_str(",");
+            buffer.push_str(height);
+            buffer.push_str("]{");
+        };
+
         if self.is_split {
-            buffer.push_str(
-                r#"
-        \includegraphics[width=\textwidth]{"#,
-            );
+            //
+            // DEFAULTS FOR THIS SECTION
+            //
+
+            let width = if let Some(width) = self.width {
+                format!("width={}", width)
+            } else {
+                format!("width={}", "\\textwidth")
+            };
+
+            let height = if let Some(height) = self.height {
+                format!("height={}", height)
+            } else {
+                "".to_string()
+            };
+
+            make_include_graphics(buffer, &height, &width);
+
         } else {
-            buffer.push_str(
-                r#"
-        \includegraphics[width=0.9\paperwidth,height=0.7\paperheight,keepaspectratio]{"#,
-            );
+            //
+            // DEFAULTS FOR THIS SECTION
+            //
+
+            let width = if let Some(width) = self.width {
+                format!("width={}", width)
+            } else {
+                format!("width={}", "0.9\\paperwidth")
+            };
+
+            let height = if let Some(height) = self.height {
+                format!("height={}", height)
+            } else {
+                format!("height={}", "0.7\\paperheight")
+            };
+
+            make_include_graphics(buffer, &height, &width);
         }
 
         buffer.push_str(&path);
@@ -134,9 +224,9 @@ impl<'a> Latex for LatexPicture<'a> {
         if let Some(caption) = self.caption() {
             buffer.push_str(r#"\caption{"#);
             buffer.push_str(caption);
-            buffer.push_str( r#"}"#);
+            buffer.push_str(r#"}"#);
         }
-        
+
         buffer.push_str(r#"\end{figure}"#)
     }
 }
@@ -153,34 +243,30 @@ impl Latex for ContentOptions {
             ContentOptions::OnlyPicture(picture) => {
                 picture.to_latex_picture(false).to_latex(buffer);
             }
-            ContentOptions::TextAndPicture(content, picture) => {
-
-                match picture.directive {
-                    Some(PictureDirective::Vertical) => {
-
-                        for c in content {
-                            c.to_latex(buffer)
-                        }
-
-                        picture.to_latex_picture(false).to_latex(buffer);
+            ContentOptions::TextAndPicture(content, picture) => match picture.orientation {
+                Orientation::Vertical => {
+                    for c in content {
+                        c.to_latex(buffer)
                     }
-                    None => {
-                        buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
 
-                        for c in content {
-                            c.to_latex(buffer)
-                        }
-
-                        buffer.push_str("\n\t\\end{minipage}%\n");
-                        buffer.push_str("\t\\hfill\n");
-                        buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
-
-                        picture.to_latex_picture(true).to_latex(buffer);
-
-                        buffer.push_str("\t\\end{minipage}\n");
-                    }
+                    picture.to_latex_picture(false).to_latex(buffer);
                 }
-            }
+                Orientation::Horizonal => {
+                    buffer.push_str("\t\\begin{minipage}{0.4\\textwidth}\n");
+
+                    for c in content {
+                        c.to_latex(buffer)
+                    }
+
+                    buffer.push_str("\n\t\\end{minipage}%\n");
+                    buffer.push_str("\t\\hfill\n");
+                    buffer.push_str("\t\\begin{minipage}{0.55\\textwidth}\n");
+
+                    picture.to_latex_picture(true).to_latex(buffer);
+
+                    buffer.push_str("\t\\end{minipage}\n");
+                }
+            },
         }
     }
 }
