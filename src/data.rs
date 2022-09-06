@@ -43,7 +43,7 @@ impl Picture {
             is_split,
             width: self.width.as_ref().map(|x| x.as_str()),
             // TODO: might need to fix this for split middle
-            height: self.width.as_ref().map(|x| x.as_str()),
+            height: self.height.as_ref().map(|x| x.as_str()),
         }
     }
 }
