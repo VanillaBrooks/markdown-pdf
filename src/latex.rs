@@ -31,6 +31,9 @@ fn write_slide<W: Write>(mut writer: W, slide: Slide) -> Result<(), Error> {
 
     // Now finished writing the frame title
 
+    // include some vspace under the title
+    writer.write_all(r#"\vspace{-15.5pt}"#.as_bytes())?;
+
     let mut buffer = String::with_capacity(200);
     slide.contents.to_latex(&mut buffer);
 
@@ -44,7 +47,7 @@ fn write_slide<W: Write>(mut writer: W, slide: Slide) -> Result<(), Error> {
 fn latex_header<W: Write>(mut writer: W, title: Title, author: String) -> Result<(), Error> {
     writer.write_all(
         r#"
-\documentclass{beamer}
+\documentclass[aspectratio=169]{beamer}
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{hyperref}

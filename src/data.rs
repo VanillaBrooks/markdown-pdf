@@ -1,5 +1,8 @@
 use super::parse::{Block, BulletItem, ParsePicture, PictureDirective, Span};
 
+use std::fmt::Write as FmtWrite;
+use std::io::Write as IoWrite;
+
 #[derive(Debug)]
 pub(crate) struct Presentation {
     pub(crate) title: Title,
@@ -166,11 +169,12 @@ impl<'a> Latex for LatexPicture<'a> {
         );
 
         let make_include_graphics = |buffer: &mut String, height: &str, width: &str| {
-            buffer.push_str("\n\\includegraphics[");
-            buffer.push_str(width);
-            buffer.push_str(",");
-            buffer.push_str(height);
-            buffer.push_str("]{");
+            write!(buffer, "\\includegraphics[{width},{height},keepaspectratio]{{").unwrap();
+            //buffer.push_str("\n\\includegraphics[");
+            //buffer.push_str(width);
+            //buffer.push_str(",");
+            //buffer.push_str(height);
+            //buffer.push_str("]{");
         };
 
         if self.is_split {
